@@ -5,9 +5,6 @@ export const metadata: Metadata = {
   title: "BeThere — Presence, thoughtfully arranged",
   description:
     "Arrange a thoughtful representative for birthdays, weddings, and moments of remembrance in Singapore. Personal gestures, transparent pricing.",
-  other: {
-    "codex-preview": "development",
-  },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

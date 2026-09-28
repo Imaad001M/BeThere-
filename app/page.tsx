@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import {
   CakeSlice,
   HeartHandshake,
@@ -14,7 +15,6 @@ import {
   Plus,
   Download,
   ShieldCheck,
-  Loader2,
 } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -93,8 +93,8 @@ type Saved = {
   details: Details;
   quote: ReturnType<typeof quote>;
   createdAt: string;
-  status: string;
 };
+const STORAGE_KEY = "bethere-demo-request-v1";
 function occasionName(id: string) {
   return occasions.find((o) => o.id === id)?.name || id;
 }
@@ -134,120 +134,27 @@ export default function Page() {
     [error, setError] = useState(""),
     [fieldErrors, setFieldErrors] = useState<Record<string, string>>({}),
     [ack, setAck] = useState(false),
-    [busy, setBusy] = useState(false),
     [saved, setSaved] = useState<Saved | null>(null),
-    [authNeeded, setAuthNeeded] = useState(false),
     [notice, setNotice] = useState("");
-  const requestId = useRef("");
   const topRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef(selection);
-  stateRef.current = selection;
   const q = saved?.quote || quote(selection),
     occasion = occasions.find((o) => o.id === selection.event)!;
   useEffect(() => {
-    requestId.current = crypto.randomUUID();
     try {
-      const staged = sessionStorage.getItem("bethere-draft");
-      if (staged) {
-        const draft = JSON.parse(staged);
-        setSelection(quoteSchema.parse(draft.selection));
-        setDetails(detailSchema.parse(draft.details));
-        setStep(2);
-        sessionStorage.removeItem("bethere-draft");
-      }
-    } catch {}
-    const id = new URLSearchParams(window.location.search).get("request");
-    if (id) {
-      setBusy(true);
-      fetch("/api/requests?id=" + encodeURIComponent(id))
-        .then(async (r) => {
-          const data = (await r.json()) as Saved & { error?: string };
-          if (!r.ok) {
-            setAuthNeeded(r.status === 401);
-            throw new Error(data.error);
-          }
-          setSaved(data);
-          setSelection(data.selection);
-          setDetails(data.details);
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const record = JSON.parse(stored) as Saved;
+        const selection = quoteSchema.parse(record.selection);
+        const details = detailSchema.parse(record.details);
+        if (typeof record.id !== "string" || typeof record.createdAt !== "string") throw new Error("Invalid saved demo");
+        queueMicrotask(() => {
+          setSaved({ id: record.id, selection, details, createdAt: record.createdAt, quote: quote(selection) });
+          setSelection(selection);
+          setDetails(details);
           setStep(3);
-        })
-        .catch((e) => setError(e.message))
-        .finally(() => setBusy(false));
-    }
-  }, []);
-  useEffect(() => {
-    const context = (
-      document as Document & {
-        modelContext?: {
-          registerTool: (
-            tool: unknown,
-            options: unknown,
-          ) => Promise<void> | void;
-        };
+        });
       }
-    ).modelContext;
-    if (!context?.registerTool) return;
-    const lifecycle = new AbortController();
-    const tools = [
-      {
-        name: "get_bethere_quote",
-        description:
-          "Read the current BeThere event selection and estimated SGD price. Does not create a request.",
-        inputSchema: {
-          type: "object",
-          properties: {},
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: true },
-        execute: () => ({
-          selection: stateRef.current,
-          ...quote(stateRef.current),
-        }),
-      },
-      {
-        name: "configure_bethere_quote",
-        description:
-          "Stage an occasion, attendance hours and optional add-ons in the visible BeThere planner. Does not book, save or pay.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            event: {
-              type: "string",
-              enum: ["birthday", "wedding", "funeral", "other"],
-            },
-            hours: { type: "integer", minimum: 2, maximum: 4 },
-            addons: {
-              type: "array",
-              items: { type: "string", enum: ["bouquet", "cake", "gift"] },
-              uniqueItems: true,
-            },
-          },
-          required: ["event", "hours", "addons"],
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: false },
-        execute: async (input: unknown) => {
-          const next = quoteSchema.parse(input);
-          setSaved(null);
-          setSelection(next);
-          setStep(0);
-          setError("");
-          stateRef.current = next;
-          await new Promise<void>((resolve) =>
-            requestAnimationFrame(() => resolve()),
-          );
-          return { selection: next, ...quote(next) };
-        },
-      },
-    ];
-    tools.forEach((tool) => {
-      try {
-        Promise.resolve(
-          context.registerTool(tool, { signal: lifecycle.signal }),
-        ).catch(() => {});
-      } catch {}
-    });
-    return () => lifecycle.abort();
+    } catch { queueMicrotask(() => setError("The saved demo on this browser could not be opened. You can create a new one.")); }
   }, []);
   function go(next: number) {
     setError("");
@@ -313,7 +220,7 @@ export default function Page() {
     setFieldErrors({});
     setError("");
   }
-  async function save() {
+  function save() {
     if (!ack) {
       setError("Please acknowledge that this is a demo request.");
       return;
@@ -322,31 +229,14 @@ export default function Page() {
       go(1);
       return;
     }
-    setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requestId: requestId.current,
-          selection,
-          details,
-          demoAcknowledged: true,
-        }),
-      });
-      const data = (await response.json()) as Saved & { error?: string };
-      if (!response.ok) {
-        setAuthNeeded(response.status === 401);
-        throw new Error(data.error || "We couldn’t save. Please try again.");
-      }
-      setSaved(data);
-      window.history.replaceState({}, "", "?request=" + data.id);
+      const record: Saved = { id: crypto.randomUUID(), selection: quoteSchema.parse(selection), details: detailSchema.parse(details), quote: quote(selection), createdAt: new Date().toISOString() };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
+      setSaved(record);
       go(3);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Please try again.");
-    } finally {
-      setBusy(false);
+    } catch {
+      setError("Couldn’t save in this browser. Check that site storage is enabled and space is available.");
     }
   }
   function reset() {
@@ -354,8 +244,7 @@ export default function Page() {
     setAck(false);
     setSelection({ event: "birthday", hours: 2, addons: [] });
     setDetails(emptyDetails);
-    requestId.current = crypto.randomUUID();
-    window.history.replaceState({}, "", "/");
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
     go(0);
   }
   function download() {
@@ -425,10 +314,10 @@ export default function Page() {
   return (
     <>
       <header className="header">
-        <a className="brand" href="/" aria-label="BeThere home">
+        <Link className="brand" href="/" aria-label="BeThere home">
           Be<span>There</span>
           <i aria-hidden="true">✳</i>
-        </a>
+        </Link>
         <nav aria-label="Main navigation">
           <button
             className="active"
@@ -491,27 +380,6 @@ export default function Page() {
             {error && (
               <div className="error-message" role="alert">
                 {error}
-                {authNeeded && (
-                  <a
-                    href={
-                      "/signin-with-chatgpt?return_to=" +
-                      encodeURIComponent(
-                        window.location.pathname + window.location.search,
-                      )
-                    }
-                    target="_top"
-                    onClick={() => {
-                      try {
-                        sessionStorage.setItem(
-                          "bethere-draft",
-                          JSON.stringify({ selection, details }),
-                        );
-                      } catch {}
-                    }}
-                  >
-                    Sign in with ChatGPT, then return to this demo
-                  </a>
-                )}
               </div>
             )}
             {step === 0 && (
@@ -865,8 +733,7 @@ export default function Page() {
                 <div className="disclosure">
                   <ShieldCheck size={20} />
                   <p>
-                    This prototype saves a demo request. No representative is
-                    assigned, no supplier is contacted, and no payment is taken.
+                    This demo plan is stored only in this browser. Anyone using this browser may see it. No representative is assigned, no supplier is contacted, and no payment is taken.
                   </p>
                 </div>
                 <label className="ack">
@@ -887,18 +754,9 @@ export default function Page() {
                   <button
                     className="primary"
                     onClick={save}
-                    disabled={busy || !ack}
+                    disabled={!ack}
                   >
-                    {busy ? (
-                      <>
-                        <Loader2 className="spin" size={17} />
-                        Saving…
-                      </>
-                    ) : (
-                      <>
-                        Save demo request <ArrowRight size={17} />
-                      </>
-                    )}
+                    Save demo plan <ArrowRight size={17} />
                   </button>
                 </div>
               </div>
@@ -915,7 +773,7 @@ export default function Page() {
                   <em>even from afar.</em>
                 </h2>
                 <p>
-                  Your plan for {details.recipient} is safely saved. This is a
+                  Your plan for {details.recipient} is saved in this browser only. This is a
                   demonstration: no visit is booked and no payment has been
                   taken.
                 </p>
@@ -1026,10 +884,9 @@ export default function Page() {
                 <button
                   className="primary"
                   onClick={save}
-                  disabled={busy || !ack}
+                  disabled={!ack}
                 >
-                  {busy ? "Saving…" : "Save demo request"}
-                  {!busy && <ArrowRight size={18} />}
+                  Save demo plan <ArrowRight size={18} />
                 </button>
               ) : (
                 <div className="saved-status">
