@@ -16,11 +16,11 @@ The final BeThere design, configured for Vercel as a **Next.js static website**.
    | Root directory | Repository root (`./`), containing `package.json` |
    | Install command | `npm ci` |
    | Build command | `npm run build` |
-   | Output directory | `out` |
+   | Output directory | Default (Override OFF) |
    | Node.js | 24.x |
    | Environment variables | None required |
 
-6. Deploy the new commit. Clear any old Vite build command or `dist` output override. `vercel.json` also includes the intended framework/build/output settings.
+6. Deploy the new commit. Clear any old Vite build command and turn OFF the Output Directory override (including `out` or `dist`). Vercel automatically detects the Next.js static export. `vercel.json` includes the framework and build settings.
 
 The previous error came from a missing `.openai/hosting.json` file. This version removes that dependency entirely and builds through Next.js rather than the original Cloudflare/Vinext setup.
 
