@@ -1,16 +1,16 @@
 {
-  "name": "bethere",
+  "name": "bethere-vercel-demo",
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22.13.0"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint . --ignore-pattern .next",
-    "test": "node tests/pricing.test.mjs"
+    "build": "next build --webpack",
+    "start": "node scripts/preview.mjs",
+    "test": "node tests/pricing.test.mjs && node tests/demo-storage.test.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

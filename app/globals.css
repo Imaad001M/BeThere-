@@ -1655,3 +1655,16 @@ footer button {
   .representative-promise { padding: 22px 19px; gap: 14px; flex-direction: column; }
   .representative-promise h3 { font-size: 24px; }
 }
+
+/* Add-on customisation follows the existing champagne and charcoal palette. */
+.addon-options { border-top: 1px solid rgba(255,255,255,.08); margin: 0 18px 20px; padding-top: 18px; display: grid; gap: 10px; cursor: default; }
+.addon-options label { color: #D4C3A3; font-size: 13px; font-weight: 500; }
+.addon-options small, .gift-summary { color: #aaaeb6; font-size: 12px; line-height: 1.7; }
+.addon-options [data-slot="select-trigger"] { width: 100%; min-height: 44px; height: auto; white-space: normal; text-align: left; border-color: rgba(255,255,255,.16); }
+.addon-options input, .addon-options textarea { width: 100%; min-width: 0; border: 1px solid rgba(255,255,255,.16); border-radius: 8px; background: #0F1115; color: #eeeae2; padding: 12px; font: inherit; font-size: 13px; }
+.addon-options textarea { resize: vertical; }
+.addon-options input:focus, .addon-options textarea:focus { outline: 1px solid #D4C3A3; outline-offset: 2px; }
+.addon-options a { font-size: 12px; color: #D4C3A3; text-decoration: underline; text-underline-offset: 4px; }
+.gift-fee { color: #D4C3A3; font-size: 14px; margin: 0; }
+.gift-summary { padding: 12px 0; overflow-wrap: anywhere; }
+.addons { align-items: start; }

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import Link from "next/link";
+import { loadDemoRequest, saveDemoRequest, type SavedRequest } from "@/lib/demo-storage";
 import {
   CakeSlice,
   HeartHandshake,
@@ -15,6 +15,7 @@ import {
   Plus,
   Download,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,7 +33,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import {
-  CATALOG,
+  CATALOG, addonName, addonPrice, giftError, cakeError,
   quote,
   money,
   quoteSchema,
@@ -42,6 +43,7 @@ import {
   type Details,
   type Addon,
 } from "@/lib/pricing";
+import { AddonOptions } from "@/components/addon-options";
 const occasions = [
   {
     id: "birthday",
@@ -87,14 +89,6 @@ const emptyDetails: Details = {
   message: "",
   notes: "",
 };
-type Saved = {
-  id: string;
-  selection: Selection;
-  details: Details;
-  quote: ReturnType<typeof quote>;
-  createdAt: string;
-};
-const STORAGE_KEY = "bethere-demo-request-v1";
 function occasionName(id: string) {
   return occasions.find((o) => o.id === id)?.name || id;
 }
@@ -113,10 +107,6 @@ function RepresentativePromise() {
           A warm introduction, a little discretion, and your wishes carried
           with care.
         </p>
-        <p>
-          With 30% of your full booking going directly to your representative,
-          your gesture also recognises the time and thought they bring.
-        </p>
       </div>
     </section>
   );
@@ -134,29 +124,117 @@ export default function Page() {
     [error, setError] = useState(""),
     [fieldErrors, setFieldErrors] = useState<Record<string, string>>({}),
     [ack, setAck] = useState(false),
-    [saved, setSaved] = useState<Saved | null>(null),
+    [busy, setBusy] = useState(false),
+    [saved, setSaved] = useState<SavedRequest | null>(null),
     [notice, setNotice] = useState("");
+  const requestId = useRef("");
   const topRef = useRef<HTMLDivElement>(null);
+  const stateRef = useRef(selection);
+  stateRef.current = selection;
   const q = saved?.quote || quote(selection),
     occasion = occasions.find((o) => o.id === selection.event)!;
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const record = JSON.parse(stored) as Saved;
-        const selection = quoteSchema.parse(record.selection);
-        const details = detailSchema.parse(record.details);
-        if (typeof record.id !== "string" || typeof record.createdAt !== "string") throw new Error("Invalid saved demo");
-        queueMicrotask(() => {
-          setSaved({ id: record.id, selection, details, createdAt: record.createdAt, quote: quote(selection) });
-          setSelection(selection);
-          setDetails(details);
-          setStep(3);
-        });
+    requestId.current = crypto.randomUUID();
+    const id = new URLSearchParams(window.location.search).get("request");
+    if (id) {
+      try {
+        const data = loadDemoRequest(id);
+        setSaved(data);
+        setSelection(data.selection);
+        setDetails(data.details);
+        setStep(3);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "We couldn’t load your saved plan.");
       }
-    } catch { queueMicrotask(() => setError("The saved demo on this browser could not be opened. You can create a new one.")); }
+    }
+  }, []);
+  useEffect(() => {
+    const context = (
+      document as Document & {
+        modelContext?: {
+          registerTool: (
+            tool: unknown,
+            options: unknown,
+          ) => Promise<void> | void;
+        };
+      }
+    ).modelContext;
+    if (!context?.registerTool) return;
+    const lifecycle = new AbortController();
+    const tools = [
+      {
+        name: "get_bethere_quote",
+        description:
+          "Read the current BeThere event selection and estimated SGD price. Does not create a request.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true },
+        execute: () => ({
+          selection: stateRef.current,
+          ...quote(stateRef.current),
+        }),
+      },
+      {
+        name: "configure_bethere_quote",
+        description:
+          "Stage an occasion, attendance hours and optional add-ons in the visible BeThere planner. Does not book, save or pay.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            event: {
+              type: "string",
+              enum: ["birthday", "wedding", "funeral", "other"],
+            },
+            hours: { type: "integer", minimum: 2, maximum: 4 },
+            bouquetSize: {type: "string", enum: ["small", "medium", "large"]},
+            bakery: {type: "string", enum: ["awfully", "bengawan", "emicakes", "patissier"]},
+            cakeFlavor: {type: "string", maxLength: 500},
+            giftItem: {type: "string", maxLength: 500},
+            giftStore: {type: "string", maxLength: 500},
+            addons: {
+              type: "array",
+              items: { type: "string", enum: ["bouquet", "cake", "gift"] },
+              uniqueItems: true,
+            },
+          },
+          required: ["event", "hours", "addons"],
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false },
+        execute: async (input: unknown) => {
+          const next = quoteSchema.parse(input);
+          setSaved(null);
+          requestId.current = crypto.randomUUID();
+          window.history.replaceState({}, "", "/");
+          setAck(false);
+          setSelection(next);
+          setStep(0);
+          setError("");
+          stateRef.current = next;
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          );
+          return { selection: next, ...quote(next) };
+        },
+      },
+    ];
+    tools.forEach((tool) => {
+      try {
+        Promise.resolve(
+          context.registerTool(tool, { signal: lifecycle.signal }),
+        ).catch(() => {});
+      } catch {}
+    });
+    return () => lifecycle.abort();
   }, []);
   function go(next: number) {
+    if (step === 0 && next > 0 && (cakeError(selection) || giftError(selection))) {
+      setError(cakeError(selection) || giftError(selection));
+      return;
+    }
     setError("");
     setStep(next);
     topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -229,14 +307,22 @@ export default function Page() {
       go(1);
       return;
     }
+    setBusy(true);
     setError("");
     try {
-      const record: Saved = { id: crypto.randomUUID(), selection: quoteSchema.parse(selection), details: detailSchema.parse(details), quote: quote(selection), createdAt: new Date().toISOString() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
-      setSaved(record);
+      const data = saveDemoRequest({
+          requestId: requestId.current,
+          selection,
+          details,
+          demoAcknowledged: true,
+      });
+      setSaved(data);
+      window.history.replaceState({}, "", "?request=" + data.id);
       go(3);
-    } catch {
-      setError("Couldn’t save in this browser. Check that site storage is enabled and space is available.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Please try again.");
+    } finally {
+      setBusy(false);
     }
   }
   function reset() {
@@ -244,7 +330,8 @@ export default function Page() {
     setAck(false);
     setSelection({ event: "birthday", hours: 2, addons: [] });
     setDetails(emptyDetails);
-    try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    requestId.current = crypto.randomUUID();
+    window.history.replaceState({}, "", "/");
     go(0);
   }
   function download() {
@@ -252,6 +339,7 @@ export default function Page() {
     const content = [
       "BETHERE — SAVED DEMO REQUEST",
       "No visit is booked. No payment has been taken.",
+      "Saved in this browser only. This plan has not been sent to BeThere.",
       "",
       "Reference: " + saved.id,
       "Occasion: " + occasionName(selection.event),
@@ -265,7 +353,9 @@ export default function Page() {
       "Duration: " + selection.hours + " hours",
       "Language: " + details.language,
       "Add-ons: " +
-        (selection.addons.map((a) => CATALOG[a].name).join(", ") || "None"),
+        (selection.addons.map((a) => addonName(a, selection)).join(", ") || "None"),
+      ...(selection.addons.includes("gift") ? ["Gift requested: " + (selection.giftItem || "Not specified"), "Buy from: " + (selection.giftStore || "Not specified"), "S$99 covers the gift service only. Gift purchase cost is additional and excluded from the total."] : []),
+      ...(selection.addons.includes("cake") ? ["Cake flavour: " + (selection.cakeFlavor || "Not specified"), "S$49 covers the cake service only. Cake purchase price is additional and excluded from this total."] : []),
       "Estimated total: " + money(q.total),
       "Representative share (30%): " + money(q.representative, true),
       "",
@@ -314,10 +404,10 @@ export default function Page() {
   return (
     <>
       <header className="header">
-        <Link className="brand" href="/" aria-label="BeThere home">
+        <a className="brand" href="/" aria-label="BeThere home">
           Be<span>There</span>
           <i aria-hidden="true">✳</i>
-        </Link>
+        </a>
         <nav aria-label="Main navigation">
           <button
             className="active"
@@ -450,7 +540,7 @@ export default function Page() {
                       const item = CATALOG[a],
                         selected = selection.addons.includes(a);
                       return (
-                        <label
+                        <div
                           className={"addon " + (selected ? "selected" : "")}
                           key={a}
                         >
@@ -492,7 +582,7 @@ export default function Page() {
                                 : item.description}
                             </p>
                             <span>
-                              {money(item.price)}
+                              {money(addonPrice(a, selection))}
                               <small>
                                 {selected ? (
                                   <>
@@ -506,7 +596,8 @@ export default function Page() {
                               </small>
                             </span>
                           </div>
-                        </label>
+                          {selected && <AddonOptions addon={a} selection={selection} onChange={(patch) => setSelection((s) => ({...s, ...patch}))} />}
+                        </div>
                       );
                     })}
                 </div>
@@ -713,10 +804,10 @@ export default function Page() {
                         />
                         <span>
                           {selection.event === "funeral"
-                            ? "Sympathy bouquet"
-                            : CATALOG[a].name}
+                            ? "Sympathy · " + addonName(a, selection)
+                            : addonName(a, selection)}
                         </span>
-                        <strong>{money(CATALOG[a].price)}</strong>
+                        <strong>{money(addonPrice(a, selection))}</strong>
                       </div>
                     ))
                   ) : (
@@ -725,6 +816,8 @@ export default function Page() {
                       selected.
                     </p>
                   )}
+                  {selection.addons.includes("cake") && <p className="gift-summary">Cake flavour: {selection.cakeFlavor || "Not specified"}<br />S$49 is the service fee only. The cake’s purchase price is additional and excluded from this total.</p>}
+                  {selection.addons.includes("gift") && <p className="gift-summary">Gift: {selection.giftItem || "Not specified"}<br />From: {selection.giftStore || "Not specified"}<br />S$99 is the service fee only. The gift’s purchase cost is additional and excluded from this total.</p>}
                   <button className="text-button" onClick={() => go(0)}>
                     Edit occasion & additions
                   </button>
@@ -733,7 +826,8 @@ export default function Page() {
                 <div className="disclosure">
                   <ShieldCheck size={20} />
                   <p>
-                    This demo plan is stored only in this browser. Anyone using this browser may see it. No representative is assigned, no supplier is contacted, and no payment is taken.
+                    Your demo plan is saved only in this browser. No details are
+                    sent to BeThere, no visit is booked, and no payment is taken.
                   </p>
                 </div>
                 <label className="ack">
@@ -754,9 +848,18 @@ export default function Page() {
                   <button
                     className="primary"
                     onClick={save}
-                    disabled={!ack}
+                    disabled={busy || !ack}
                   >
-                    Save demo plan <ArrowRight size={17} />
+                    {busy ? (
+                      <>
+                        <Loader2 className="spin" size={17} />
+                        Saving…
+                      </>
+                    ) : (
+                      <>
+                        Save demo request <ArrowRight size={17} />
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -773,9 +876,9 @@ export default function Page() {
                   <em>even from afar.</em>
                 </h2>
                 <p>
-                  Your plan for {details.recipient} is saved in this browser only. This is a
-                  demonstration: no visit is booked and no payment has been
-                  taken.
+                  Your plan for {details.recipient} is saved in this browser.
+                  No visit is booked and no payment has been taken.
+                  Download a copy to keep it if you clear your browser data.
                 </p>
                 <div className="saved-detail">
                   <span>REQUEST REFERENCE</span>
@@ -841,12 +944,14 @@ export default function Page() {
                 <div className="price-row extra-line" key={a}>
                   <span>
                     {selection.event === "funeral"
-                      ? "Sympathy bouquet"
-                      : CATALOG[a].name}
+                      ? "Sympathy · " + addonName(a, selection)
+                      : addonName(a, selection)}
                   </span>
-                  <span>{money(CATALOG[a].price)}</span>
+                  <span>{money(addonPrice(a, selection))}</span>
                 </div>
               ))}
+              {selection.addons.includes("cake") && <p className="gift-summary">Cake purchase price is additional. Only the S$49 cake service fee is included in this total.</p>}
+              {selection.addons.includes("gift") && <p className="gift-summary">Gift purchase cost is additional. Only the S$99 gift service fee is included in this total.</p>}
               <ul>
                 <li>
                   <Check />A personal message from you
@@ -884,9 +989,10 @@ export default function Page() {
                 <button
                   className="primary"
                   onClick={save}
-                  disabled={!ack}
+                  disabled={busy || !ack}
                 >
-                  Save demo plan <ArrowRight size={18} />
+                  {busy ? "Saving…" : "Save demo request"}
+                  {!busy && <ArrowRight size={18} />}
                 </button>
               ) : (
                 <div className="saved-status">
@@ -949,8 +1055,9 @@ export default function Page() {
                 </div>
               </div>
               <p className="dialog-note">
-                This version saves demo requests only. Real visits, payments,
-                supplier orders and representative matching are not active.
+                This version saves demo plans only in your browser. They are
+                not sent to BeThere or shared across devices. Real visits,
+                payments, supplier orders and representative matching are not active.
               </p>
         </DialogContent>
       </Dialog>

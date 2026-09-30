@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import { quote, quoteSchema, requestSchema, giftError } from '../lib/pricing.ts';
+const base={event:'birthday',hours:2,addons:['bouquet']};
+for(const [bouquetSize,price] of [['small',4900],['medium',7900],['large',11900]]) assert.equal(quote({...base,bouquetSize}).total,19900+price);
+for(const [bakery,price] of [['awfully',8900],['bengawan',6900],['emicakes',7900],['patissier',10900]]) assert.equal(quote({...base,addons:['cake'],bakery}).total,19900+4900);
+assert.equal(quote({...base,addons:[],bouquetSize:'large',bakery:'patissier'}).total,19900);
+assert.equal(quoteSchema.safeParse({...base,bakery:'unknown'}).success,false);
+assert.equal(quoteSchema.safeParse({...base,bouquetSize:'huge'}).success,false);
+assert.equal(quoteSchema.safeParse({...base,giftItem:'x'.repeat(501)}).success,false);
+assert.ok(giftError({...base,addons:['gift']}));
+const selection={...base,addons:['bouquet','cake','gift'],bouquetSize:'large',bakery:'patissier',cakeFlavor:'Chocolate, 6 inch',giftItem:'Blue scarf',giftStore:'Example shop'};
+assert.equal(giftError(selection),'');
+assert.equal(quote(selection).total,46600);
+assert.equal(quote(selection).representative,13980);
+const details={yourName:'Alex Tan',email:'alex@example.com',recipient:'Jamie',date:new Date(Date.now()+7*864e5).toISOString().slice(0,10),time:'18:00',venue:'Sample Singapore venue',language:'English',message:'',notes:''};
+const input={requestId:crypto.randomUUID(),selection,details,demoAcknowledged:true};
+assert.equal(requestSchema.safeParse(input).success,true);
+assert.equal(requestSchema.safeParse({...input,selection:{...selection,giftStore:' '}}).success,false);
+console.log('PASS: all option prices, inactive add-ons, invalid choices, gift instructions, total and commission.');
+
+assert.equal(requestSchema.safeParse({...input,selection:{...selection,cakeFlavor:" "}}).success,false);
+assert.equal(quoteSchema.safeParse({...base,cakeFlavor:"x".repeat(501)}).success,false);

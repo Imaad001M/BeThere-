@@ -4,16 +4,16 @@ assert.equal(quote({ event: "birthday", hours: 2, addons: [] }).total, 19900);
 assert.equal(
   quote({ event: "wedding", hours: 4, addons: ["bouquet", "cake", "gift"] })
     .total,
-  62400,
+  58400,
 );
 const q = quote({ event: "birthday", hours: 2, addons: ["bouquet", "cake"] });
-assert.equal(q.total, 36700);
-assert.equal(q.representative, 11010);
-assert.equal(q.platform, 25690);
+assert.equal(q.total, 32700);
+assert.equal(q.representative, 9810);
+assert.equal(q.platform, 22890);
 assert.equal(
   economics({ event: "birthday", hours: 2, addons: ["bouquet", "cake"] })
     .contribution,
-  13958,
+  15374,
 );
 for (const bad of [
   { event: "funeral", hours: 2, addons: ["cake"] },
