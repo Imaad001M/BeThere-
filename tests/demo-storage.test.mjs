@@ -40,3 +40,9 @@ assert.throws(() => loadDemoRequest(saved.id, storage), /could not be read/);
 entries.set(key, JSON.stringify({ ...old, quote: { total: 1 } }));
 assert.throws(() => loadDemoRequest(saved.id, storage), /could not be read/);
 console.log("PASS: local save/reload, full-order price/share, retries, conflicting references, acknowledgement, missing/invalid records, full storage, and historical plans.");
+
+const funeralInput = {...input, requestId: crypto.randomUUID(), selection: {event: "funeral", hours: 2, addons: []}, details: {...input.details, religion: "Other", religionOther: "Family tradition"}};
+const funeralSaved = saveDemoRequest(funeralInput, storage);
+assert.equal(loadDemoRequest(funeralSaved.id, storage).details.religion, "Other");
+assert.equal(loadDemoRequest(funeralSaved.id, storage).details.religionOther, "Family tradition");
+assert.throws(() => saveDemoRequest({...funeralInput, requestId: crypto.randomUUID(), details: {...funeralInput.details, religion: "invalid"}}, storage));

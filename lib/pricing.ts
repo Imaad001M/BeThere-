@@ -130,6 +130,7 @@ export function minimumDate() {
     .toISOString()
     .slice(0, 10);
 }
+export const RELIGIONS = ["No religious preference", "Buddhist", "Taoist", "Christian", "Catholic", "Muslim", "Hindu", "Sikh", "Jewish", "Other", "Prefer not to say"] as const;
 export const detailFieldsSchema = z
   .object({
     yourName: z.string().trim().min(2, "Please enter your name.").max(80),
@@ -142,6 +143,8 @@ export const detailFieldsSchema = z
       .trim()
       .min(5, "Please add the venue and address.")
       .max(250),
+    religion: z.enum(RELIGIONS).optional(),
+    religionOther: z.string().trim().max(200).optional(),
     language: z.enum(["English", "Mandarin", "Malay", "Tamil"]),
     message: z.string().trim().max(1000),
     notes: z.string().trim().max(1000),

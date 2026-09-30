@@ -33,7 +33,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import {
-  CATALOG, addonName, addonPrice, giftError, cakeError,
+  RELIGIONS, CATALOG, addonName, addonPrice, giftError, cakeError,
   quote,
   money,
   quoteSchema,
@@ -241,6 +241,7 @@ export default function Page() {
   }
   function changeOccasion(value: string) {
     const next = value as Selection["event"];
+    if (next !== "funeral") setDetails(({religion, religionOther, ...rest}) => rest);
     if (next === "funeral" && selection.addons.some((a) => a !== "bouquet"))
       setNotice(
         "Celebration cake and the gift have been removed for remembrance.",
@@ -352,6 +353,7 @@ export default function Page() {
       "Venue: " + details.venue,
       "Duration: " + selection.hours + " hours",
       "Language: " + details.language,
+      ...(selection.event === "funeral" ? ["Religion / tradition: " + (details.religion === "Other" ? "Other" + (details.religionOther ? " — " + details.religionOther : "") : details.religion || "Not specified")] : []),
       "Add-ons: " +
         (selection.addons.map((a) => addonName(a, selection)).join(", ") || "None"),
       ...(selection.addons.includes("gift") ? ["Gift requested: " + (selection.giftItem || "Not specified"), "Buy from: " + (selection.giftStore || "Not specified"), "S$99 covers the gift service only. Gift purchase cost is additional and excluded from the total."] : []),
@@ -664,6 +666,17 @@ export default function Page() {
                       </SelectContent>
                     </Select>
                   </label>
+                  {selection.event === "funeral" && <div className="full-field">
+                    <label className="field">
+                      <span>Religion or tradition <small>Optional</small></span>
+                      <Select value={details.religion ?? ""} onValueChange={(value) => update("religion", value)}>
+                        <SelectTrigger aria-label="Religion or tradition"><SelectValue placeholder="Select a religion or tradition" /></SelectTrigger>
+                        <SelectContent>{RELIGIONS.map((religion) => <SelectItem key={religion} value={religion}>{religion}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </label>
+                    <p className="catalog-note">Help us respect the family’s wishes. You can share any customs or guidance in the additional notes below.</p>
+                    {details.religion === "Other" && fields("religionOther", "Specify the religion or tradition (optional)", "text", "Religion, tradition or denomination")}
+                  </div>}
                   {fields("date", "Event date", "date")}
                   {fields("time", "Arrival time · Singapore", "time")}
                   <div className="full-field">
@@ -789,6 +802,7 @@ export default function Page() {
                       {details.notes}
                     </p>
                   )}
+                  {selection.event === "funeral" && <p className="review-email">Religion / tradition: {details.religion === "Other" ? "Other" + (details.religionOther ? " — " + details.religionOther : "") : details.religion || "Not specified"}</p>}
                   <p className="review-email">Contact: {details.email}</p>
                 </div>
                 <div className="review-addons">
