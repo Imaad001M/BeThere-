@@ -408,7 +408,10 @@ export default function Page() {
       <header className="header">
         <a className="brand" href="/" aria-label="BeThere home">
           Be<span>There</span>
-          <i aria-hidden="true">✳</i>
+          <svg className="brand-mark" aria-hidden="true" viewBox="0 0 32 32" focusable="false">
+            <path d="M16 3v26M3 16h26M6.8 6.8l18.4 18.4M25.2 6.8 6.8 25.2" />
+            <circle cx="16" cy="16" r="2.2" />
+          </svg>
         </a>
         <nav aria-label="Main navigation">
           <button
@@ -1020,7 +1023,11 @@ export default function Page() {
       </main>
       <footer>
         <span className="brand small">
-          BeThere<i>✳</i>
+          BeThere
+          <svg className="brand-mark" aria-hidden="true" viewBox="0 0 32 32" focusable="false">
+            <path d="M16 3v26M3 16h26M6.8 6.8l18.4 18.4M25.2 6.8 6.8 25.2" />
+            <circle cx="16" cy="16" r="2.2" />
+          </svg>
         </span>
         <span>Distance changes plans. It doesn’t have to change care.</span>
       </footer>
